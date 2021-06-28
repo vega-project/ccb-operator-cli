@@ -12,6 +12,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/sirupsen/logrus"
@@ -121,6 +122,83 @@ func getCalculationID(c *cli.Context) error {
 	return nil
 }
 
+func getCalculationResult(c *cli.Context) error {
+	teff := c.Float64("teff")
+	logG := c.Float64("logG")
+	path := c.String("results-download-path")
+
+	resp, err := http.Get(globalConfig.APIURL + "/calculations/results?teff=" + fmt.Sprintf("%0.1f", teff) + "&logg=" + fmt.Sprintf("%0.2f", logG))
+	if err != nil {
+		logrus.WithError(err).Fatal("Couldn't retrieve the data from headers.")
+	}
+
+	fileNameHeader := resp.Header.Get("Content-Disposition")
+	if fileNameHeader == "" {
+		return fmt.Errorf("couldn't retrieve Content-Disposition header")
+	}
+	splitFileNameHeader := strings.Split(fileNameHeader, "=")
+
+	defaultPath, err := config.GetPathToCalculation(path, splitFileNameHeader[1])
+	if err != nil {
+		logrus.WithError(err).Fatal("Couldn't get the path user added to download the calculations.")
+	}
+
+	body, responseError, err := request("GET", globalConfig.APIURL+"/calculations/results?teff="+fmt.Sprintf("%0.1f", teff)+"&logg="+fmt.Sprintf("%0.2f", logG), bytes.NewBuffer(nil))
+	if err != nil {
+		logrus.WithError(err).Fatal("error while perfoming the http request")
+	} else if responseError != nil {
+		logrus.WithFields(logrus.Fields{"message": responseError.Message, "status_code": responseError.StatusCode}).Fatal("errors occurred")
+	}
+
+	err = config.CreateAndWriteFile(body, defaultPath)
+	if err != nil {
+		logrus.WithError(err).Fatal("Something went wrong while creating or writing to a file.")
+	}
+
+	logrus.Info("The calculations were downloaded into: ", defaultPath)
+
+	return nil
+}
+
+func getCalculationResultByID(c *cli.Context) error {
+	args := os.Args
+	calcID := args[len(args)-1]
+
+	path := c.String("results-download-path")
+
+	resp, err := http.Get(globalConfig.APIURL + "/calculations/results/" + calcID)
+	if err != nil {
+		return fmt.Errorf("couldn't retrieve Content-Disposition header")
+	}
+
+	fileNameHeader := resp.Header.Get("Content-Disposition")
+	if fileNameHeader == "" {
+		return fmt.Errorf("couldn't retrieve Content-Disposition header")
+	}
+	splitFileNameHeader := strings.Split(fileNameHeader, "=")
+
+	defaultPath, err := config.GetPathToCalculation(path, splitFileNameHeader[1])
+	if err != nil {
+		logrus.WithError(err).Fatal("Couldn't get the path user added to download the calculations.")
+	}
+
+	body, responseError, err := request("GET", globalConfig.APIURL+"/calculations/results/"+calcID, bytes.NewBuffer(nil))
+	if err != nil {
+		logrus.WithError(err).Fatal("error while perfoming the http request")
+	} else if responseError != nil {
+		logrus.WithFields(logrus.Fields{"message": responseError.Message, "status_code": responseError.StatusCode}).Fatal("errors occurred")
+	}
+
+	err = config.CreateAndWriteFile(body, defaultPath)
+	if err != nil {
+		logrus.WithError(err).Fatal("Something went wrong while creating or writing to a file.")
+	}
+
+	logrus.Info("The calculations were downloaded into: ", defaultPath)
+
+	return nil
+}
+
 func createCalculation(c *cli.Context) error {
 	teff := c.Float64("teff")
 	logG := c.Float64("logG")
@@ -222,6 +300,10 @@ func main() {
 				Name:  "logG",
 				Usage: "specifies the logG value when creating a calculation.",
 			},
+			&cli.StringFlag{
+				Name:  "results-download-path",
+				Usage: "Specified path to the downloaded calculation results.",
+			},
 		},
 		Commands: []*cli.Command{
 			{
@@ -248,6 +330,21 @@ func main() {
 						Aliases: []string{"calcs"},
 						Usage:   "",
 						Action:  getCalculations,
+					},
+
+					{
+						Name:    "results",
+						Aliases: []string{"res"},
+						Usage:   "get results of calculations",
+						Action: func(c *cli.Context) error {
+							var err error
+							if c.Float64("teff") == 0 || c.Float64("logG") == 0 {
+								err = getCalculationResultByID(c)
+							} else {
+								err = getCalculationResult(c)
+							}
+							return err
+						},
 					},
 				},
 			},
