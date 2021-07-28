@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/url"
+	"os"
 	"os/user"
 	"path/filepath"
 )
@@ -48,4 +49,39 @@ func GetDefaultConfigPath() (string, error) {
 	home := user.HomeDir
 
 	return filepath.Join(home, DefaultConfigPath, DefaultConfigFileName), nil
+}
+
+func GetPathToCalculation(defaultPath string, fileName string) (string, error) {
+	user, err := user.Current()
+	if err != nil {
+		return "", fmt.Errorf("couldn't get user's information: %v", err)
+	}
+	home := user.HomeDir
+
+	if defaultPath == "" {
+		return filepath.Join(home, DefaultConfigPath, fileName), nil
+	}
+
+	_, err = os.Stat(defaultPath)
+	if err != nil {
+		return "", fmt.Errorf("couldn't stat path %s: %v", defaultPath, err)
+	}
+	path := filepath.Join(defaultPath, filepath.Base(fileName))
+
+	return path, nil
+}
+
+func CreateAndWriteFile(body []byte, defaultPath string) error {
+	file, err := os.Create(defaultPath)
+	if err != nil {
+		return fmt.Errorf("couldn't create the calculation result file")
+	}
+
+	defer file.Close()
+
+	_, err = file.Write(body)
+	if err != nil {
+		return fmt.Errorf("couldn't write the data into the tar file")
+	}
+	return nil
 }
