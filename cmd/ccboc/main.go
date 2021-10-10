@@ -220,7 +220,7 @@ func createCalculation(c *cli.Context) error {
 		logrus.WithError(err).Fatal("Error unmarshaling json response")
 	}
 
-	fmt.Printf("Calculation created: %s", calc.Name)
+	fmt.Printf("Calculation created: %s\n", calc.Name)
 	return nil
 }
 
