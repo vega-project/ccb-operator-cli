@@ -127,9 +127,23 @@ func getCalculationResult(c *cli.Context) error {
 	logG := c.Float64("logG")
 	path := c.String("results-download-path")
 
-	resp, err := http.Get(globalConfig.APIURL + "/calculations/results?teff=" + fmt.Sprintf("%0.1f", teff) + "&logg=" + fmt.Sprintf("%0.2f", logG))
+	req, err := http.NewRequest(http.MethodGet, globalConfig.APIURL+"/calculations/results?teff="+fmt.Sprintf("%0.1f", teff)+"&logg="+fmt.Sprintf("%0.2f", logG), bytes.NewBuffer(nil))
 	if err != nil {
-		logrus.WithError(err).Fatal("Couldn't retrieve the data from headers.")
+		logrus.WithError(err).Fatal("Coudln't create the request.")
+	}
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", globalConfig.Token))
+	req.Header.Add("Accept", "application/json")
+
+	client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+	resp, err := client.Do(req)
+	if err != nil {
+		logrus.WithError(err).Fatal("Coudln't fullfil the request.")
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		logrus.WithError(err).Fatal("Error while reading the response.")
 	}
 
 	fileNameHeader := resp.Header.Get("Content-Disposition")
@@ -141,13 +155,6 @@ func getCalculationResult(c *cli.Context) error {
 	defaultPath, err := config.GetPathToCalculation(path, splitFileNameHeader[1])
 	if err != nil {
 		logrus.WithError(err).Fatal("Couldn't get the path user added to download the calculations.")
-	}
-
-	body, responseError, err := request("GET", globalConfig.APIURL+"/calculations/results?teff="+fmt.Sprintf("%0.1f", teff)+"&logg="+fmt.Sprintf("%0.2f", logG), bytes.NewBuffer(nil))
-	if err != nil {
-		logrus.WithError(err).Fatal("error while perfoming the http request")
-	} else if responseError != nil {
-		logrus.WithFields(logrus.Fields{"message": responseError.Message, "status_code": responseError.StatusCode}).Fatal("errors occurred")
 	}
 
 	err = config.CreateAndWriteFile(body, defaultPath)
@@ -166,9 +173,23 @@ func getCalculationResultByID(c *cli.Context) error {
 
 	path := c.String("results-download-path")
 
-	resp, err := http.Get(globalConfig.APIURL + "/calculations/results/" + calcID)
+	req, err := http.NewRequest(http.MethodGet, globalConfig.APIURL+"/calculations/results/"+calcID, bytes.NewBuffer(nil))
 	if err != nil {
-		return fmt.Errorf("couldn't retrieve Content-Disposition header")
+		logrus.WithError(err).Fatal("Coudln't create the request.")
+	}
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", globalConfig.Token))
+	req.Header.Add("Accept", "application/json")
+
+	client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+	resp, err := client.Do(req)
+	if err != nil {
+		logrus.WithError(err).Fatal("Coudln't fullfil the request.")
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		logrus.WithError(err).Fatal("Error while reading the response.")
 	}
 
 	fileNameHeader := resp.Header.Get("Content-Disposition")
@@ -180,13 +201,6 @@ func getCalculationResultByID(c *cli.Context) error {
 	defaultPath, err := config.GetPathToCalculation(path, splitFileNameHeader[1])
 	if err != nil {
 		logrus.WithError(err).Fatal("Couldn't get the path user added to download the calculations.")
-	}
-
-	body, responseError, err := request("GET", globalConfig.APIURL+"/calculations/results/"+calcID, bytes.NewBuffer(nil))
-	if err != nil {
-		logrus.WithError(err).Fatal("error while perfoming the http request")
-	} else if responseError != nil {
-		logrus.WithFields(logrus.Fields{"message": responseError.Message, "status_code": responseError.StatusCode}).Fatal("errors occurred")
 	}
 
 	err = config.CreateAndWriteFile(body, defaultPath)
@@ -238,6 +252,7 @@ func request(method, endpoint string, buffer *bytes.Buffer) ([]byte, *errorRespo
 		return nil, nil, fmt.Errorf("Error on response: %v", err)
 	}
 	defer resp.Body.Close()
+
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, nil, fmt.Errorf("Error reading response: %v", err)
