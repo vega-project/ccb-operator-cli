@@ -171,6 +171,10 @@ func getCalculationResultByID(c *cli.Context) error {
 	args := os.Args
 	calcID := args[len(args)-1]
 
+	if len(os.Args) != 4 {
+		return fmt.Errorf("not enough arguments to use `get results`")
+	}
+
 	path := c.String("results-download-path")
 
 	req, err := http.NewRequest(http.MethodGet, globalConfig.APIURL+"/calculations/results/"+calcID, bytes.NewBuffer(nil))
@@ -353,10 +357,12 @@ func main() {
 						Usage:   "get results of calculations",
 						Action: func(c *cli.Context) error {
 							var err error
-							if c.Float64("teff") == 0 || c.Float64("logG") == 0 {
+							if c.Float64("teff") == 0 && c.Float64("logG") == 0 {
 								err = getCalculationResultByID(c)
-							} else {
+							} else if c.Float64("teff") != 0 && c.Float64("logG") != 0 {
 								err = getCalculationResult(c)
+							} else {
+								return fmt.Errorf("wrong usage of `get results`")
 							}
 							return err
 						},
