@@ -9,13 +9,15 @@ NAME:
 USAGE:
    
   ccboc --teff=10000 --logG=4.0 create (Creates a calculation with teff=10000 and LogG=4.0)
-  ccboc get calculation calc-1881i9dh5zvnllip (Gets the calculation with id 'calc-1881i9dh5zvnllip')
-  ccboc get calculations [Get all active calculations] 
+  ccboc get calculation calc-1881i9dh5zvnllip (Gets the calculation with id='calc-1881i9dh5zvnllip')
+  ccboc get calculations (Gets all active calculations)
+  ccboc --teff=10000 --logG=4.0 get results (Downloads the result of a calculation with teff=10000 and LogG=4.0)
+  ccboc get results calc-1881i9dh5zvnllip (Downloads the result of a calculation with id='calc-1881i9dh5zvnllip')
       
 
 COMMANDS:
    create, c  Creates a calculation using the values from --teff and --logG flags
-   get, g     Usage: `get calculation CALCID`, or `get calculations` to get all active calculations
+   get, g     Usage: `get calculation CALCID`, or `get calculations` to get all active calculations, or `get results CALCID` to download a calculation's result by CALCID, or `TEFF LOGG get results`.
    login, l   Login to api server using the provided url and token. Also it generates the configuration file (default path is $HOME/.config/ccbo/config)
    help, h    Shows a list of commands or help for one command
 
@@ -24,5 +26,6 @@ GLOBAL OPTIONS:
    --teff value             specifies the teff value when creating a calculation. (default: 0)
    --token value, -t value  Token for authenticating to the API server.
    --url value, -u value    URL of the API server.
+   --results-download-path  Specifies a path to the downloaded calculation results
    --help, -h               show help (default: false)
 ```
