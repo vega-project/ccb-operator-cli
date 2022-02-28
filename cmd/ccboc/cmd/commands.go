@@ -17,6 +17,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/vega-project/ccb-operator-cli/pkg/config"
 
+	bulkv1 "github.com/vega-project/ccb-operator/pkg/apis/calculationbulk/v1"
 	calculationsv1 "github.com/vega-project/ccb-operator/pkg/apis/calculations/v1"
 )
 
@@ -89,15 +90,22 @@ func getCalculations() error {
 		logrus.WithFields(logrus.Fields{"message": responseError.Message, "status_code": responseError.StatusCode}).Fatal("errors occurred")
 	}
 
-	var data *calculationsv1.CalculationList
-	if err := json.Unmarshal(body, &data); err != nil {
+	var response map[string]json.RawMessage
+	if err := json.Unmarshal(body, &response); err != nil {
 		return err
 	}
-	output(data)
+
+	var calcList *calculationsv1.CalculationList
+	if err := json.Unmarshal(response["data"], &calcList); err != nil {
+		return err
+	}
+
+	output(calcList)
+
 	return nil
 }
 
-func getCalculationID() error {
+func getCalculationByID() error {
 	args := os.Args
 	calcID := args[len(args)-1]
 
@@ -108,12 +116,18 @@ func getCalculationID() error {
 		logrus.WithFields(logrus.Fields{"message": responseError.Message, "status_code": responseError.StatusCode}).Fatal("errors occurred")
 	}
 
+	var response map[string]json.RawMessage
+	if err := json.Unmarshal(body, &response); err != nil {
+		return err
+	}
+
 	var calc *calculationsv1.Calculation
-	if err := json.Unmarshal(body, &calc); err != nil {
+	if err := json.Unmarshal(response["data"], &calc); err != nil {
 		return err
 	}
 
 	output(calc)
+
 	return nil
 }
 
@@ -126,8 +140,8 @@ func getCalculationResult() error {
 	u.Path = "/calculations/results"
 
 	q := u.Query()
+	q.Set("logg", fmt.Sprintf("%0.2f", logG))
 	q.Set("teff", fmt.Sprintf("%0.1f", teff))
-	q.Set("logG", fmt.Sprintf("%0.2f", logG))
 	u.RawQuery = q.Encode()
 
 	req, err := http.NewRequest(http.MethodGet, u.String(), bytes.NewBuffer(nil))
@@ -218,6 +232,83 @@ func getCalculationResultByID() error {
 	return nil
 }
 
+func getCalculationBulkByID() error {
+	args := os.Args
+	bulkID := args[len(args)-1]
+
+	body, responseError, err := request("GET", globalConfig.APIURL+"/bulk/"+bulkID, bytes.NewBuffer(nil))
+	if err != nil {
+		return err
+	} else if responseError != nil {
+		logrus.WithFields(logrus.Fields{"message": responseError.Message, "status_code": responseError.StatusCode}).Fatal("errors occurred")
+	}
+
+	var response map[string]json.RawMessage
+	if err := json.Unmarshal(body, &response); err != nil {
+		return err
+	}
+
+	var bulk *bulkv1.CalculationBulk
+	if err := json.Unmarshal(response["data"], &bulk); err != nil {
+		return err
+	}
+
+	output(bulk)
+
+	return nil
+}
+
+func getCalculationBulks() error {
+	body, responseError, err := request("GET", globalConfig.APIURL+"/bulks", bytes.NewBuffer(nil))
+	if err != nil {
+		return err
+	} else if responseError != nil {
+		logrus.WithFields(logrus.Fields{"message": responseError.Message, "status_code": responseError.StatusCode}).Fatal("errors occurred")
+	}
+
+	var response map[string]json.RawMessage
+	if err := json.Unmarshal(body, &response); err != nil {
+		return err
+	}
+
+	var calcBulkList *bulkv1.CalculationBulkList
+	if err := json.Unmarshal(response["data"], &calcBulkList); err != nil {
+		return err
+	}
+
+	output(calcBulkList)
+
+	return nil
+}
+
+func createCalculationBulk() error {
+	fileBytes, err := ioutil.ReadFile(bulkFile)
+	if err != nil {
+		logrus.WithError(err).Fatal("Couldn't open the input .json file to create a calculation bulk.")
+	}
+
+	body, responseError, err := request("POST", globalConfig.APIURL+"/bulk/create", bytes.NewBuffer(fileBytes))
+	if err != nil {
+		return err
+	} else if responseError != nil {
+		logrus.WithFields(logrus.Fields{"message": responseError.Message, "status_code": responseError.StatusCode}).Fatal("errors occurred")
+	}
+
+	var response map[string]json.RawMessage
+	if err := json.Unmarshal(body, &response); err != nil {
+		return err
+	}
+
+	var bulk *bulkv1.CalculationBulk
+	if err := json.Unmarshal(fileBytes, &bulk); err != nil {
+		logrus.WithError(err).Fatal("Couldn't unmarshal the contents of the input .json file.")
+	}
+
+	fmt.Println("Calculation bulk created")
+
+	return nil
+}
+
 func createCalculation() error {
 	if teff == 0 || logG == 0 {
 		return fmt.Errorf("--teff and --logG must specified together")
@@ -276,15 +367,36 @@ func output(iface interface{}) {
 	t.SetOutputMirror(os.Stdout)
 	t.AppendHeader(table.Row{"#", "Name", "Teff", "LogG", "Phase", "Worker"})
 
+	bulksWriter := table.NewWriter()
+	bulksWriter.SetOutputMirror(os.Stdout)
+	bulksWriter.AppendHeader(table.Row{"#", "Name", "Teff", "LogG", "Phase"})
+
 	switch v := iface.(type) {
 	case *calculationsv1.Calculation:
 		t.AppendRows([]table.Row{{0, v.Name, v.Spec.Teff, v.Spec.LogG, v.Phase, v.Assign}})
+		t.Render()
 	case *calculationsv1.CalculationList:
 		for i, calc := range v.Items {
 			t.AppendRows([]table.Row{{i + 1, calc.Name, fmt.Sprintf("%0.1f", calc.Spec.Teff), fmt.Sprintf("%0.2f", calc.Spec.LogG), calc.Phase, calc.Assign}})
 		}
 		t.AppendSeparator()
 		t.AppendFooter(table.Row{"Total", len(v.Items), "", ""})
+		t.Render()
+	case *bulkv1.CalculationBulk:
+		for _, c := range v.Calculations {
+			bulksWriter.AppendRows([]table.Row{{0, v.Name, fmt.Sprintf("%0.1f", c.Params.Teff), fmt.Sprintf("%0.2f", c.Params.LogG), c.Phase}})
+		}
+		bulksWriter.AppendSeparator()
+		bulksWriter.AppendFooter(table.Row{"Total", len(v.Calculations), "", ""})
+		bulksWriter.Render()
+	case *bulkv1.CalculationBulkList:
+		for i, bulk := range v.Items {
+			for _, c := range bulk.Calculations {
+				bulksWriter.AppendRows([]table.Row{{i + 1, bulk.Name, fmt.Sprintf("%0.1f", c.Params.Teff), fmt.Sprintf("%0.2f", c.Params.LogG), c.Phase}})
+			}
+		}
+		bulksWriter.AppendSeparator()
+		bulksWriter.AppendFooter(table.Row{"Total", len(v.Items), "", ""})
+		bulksWriter.Render()
 	}
-	t.Render()
 }
