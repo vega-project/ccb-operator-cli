@@ -19,6 +19,7 @@ import (
 
 	bulkv1 "github.com/vega-project/ccb-operator/pkg/apis/calculationbulk/v1"
 	calculationsv1 "github.com/vega-project/ccb-operator/pkg/apis/calculations/v1"
+	workersv1 "github.com/vega-project/ccb-operator/pkg/apis/workers/v1"
 )
 
 type errorResponse struct {
@@ -281,6 +282,29 @@ func getCalculationBulks() error {
 	return nil
 }
 
+func getWorkerPools() error {
+	body, responseError, err := request("GET", globalConfig.APIURL+"/workerpools", bytes.NewBuffer(nil))
+	if err != nil {
+		return err
+	} else if responseError != nil {
+		logrus.WithFields(logrus.Fields{"message": responseError.Message, "status_code": responseError.StatusCode}).Fatal("errors occurred")
+	}
+
+	var response map[string]json.RawMessage
+	if err := json.Unmarshal(body, &response); err != nil {
+		return err
+	}
+
+	var workerPoolsList *workersv1.WorkerPoolList
+	if err := json.Unmarshal(response["data"], &workerPoolsList); err != nil {
+		return err
+	}
+
+	output(workerPoolsList)
+
+	return nil
+}
+
 func createCalculationBulk() error {
 	fileBytes, err := ioutil.ReadFile(bulkFile)
 	if err != nil {
@@ -371,6 +395,10 @@ func output(iface interface{}) {
 	bulksWriter.SetOutputMirror(os.Stdout)
 	bulksWriter.AppendHeader(table.Row{"#", "Name", "Teff", "LogG", "Phase"})
 
+	workersWriter := table.NewWriter()
+	workersWriter.SetOutputMirror(os.Stdout)
+	workersWriter.AppendHeader(table.Row{"#", "Name", "Workers"})
+
 	switch v := iface.(type) {
 	case *calculationsv1.Calculation:
 		t.AppendRows([]table.Row{{0, v.Name, v.Spec.Teff, v.Spec.LogG, v.Phase, v.Assign}})
@@ -391,12 +419,23 @@ func output(iface interface{}) {
 		bulksWriter.Render()
 	case *bulkv1.CalculationBulkList:
 		for i, bulk := range v.Items {
+			bulksWriter.AppendRows([]table.Row{{i + 1, bulk.Name, "", "", ""}})
 			for _, c := range bulk.Calculations {
-				bulksWriter.AppendRows([]table.Row{{i + 1, bulk.Name, fmt.Sprintf("%0.1f", c.Params.Teff), fmt.Sprintf("%0.2f", c.Params.LogG), c.Phase}})
+				bulksWriter.AppendRows([]table.Row{{"", "", fmt.Sprintf("%0.1f", c.Params.Teff), fmt.Sprintf("%0.2f", c.Params.LogG), c.Phase}})
 			}
 		}
 		bulksWriter.AppendSeparator()
 		bulksWriter.AppendFooter(table.Row{"Total", len(v.Items), "", ""})
 		bulksWriter.Render()
+	case *workersv1.WorkerPoolList:
+		for i, worker := range v.Items {
+			workersWriter.AppendRows([]table.Row{{i + 1, worker.Name, ""}})
+			for _, w := range worker.Spec.Workers {
+				workersWriter.AppendRows([]table.Row{{"", "", w.Name}})
+			}
+		}
+		workersWriter.AppendSeparator()
+		workersWriter.AppendFooter(table.Row{"Total", len(v.Items), "", ""})
+		workersWriter.Render()
 	}
 }

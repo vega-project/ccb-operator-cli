@@ -64,6 +64,18 @@ var (
 		},
 	}
 
+	workerPoolsCmd = &cobra.Command{
+		Use:   "workerpools",
+		Short: "Get all workerpools.",
+		Run: func(cmd *cobra.Command, args []string) {
+			initializeConfig()
+			err := getWorkerPools()
+			if err != nil {
+				logrus.WithError(err).Fatal("get workerpools command failed")
+			}
+		},
+	}
+
 	calculationCmd = &cobra.Command{
 		Use:   "calculation",
 		Short: "Get calculation by an ID.",
@@ -165,6 +177,8 @@ func init() {
 	getCmd.AddCommand(bulkCmd)
 
 	getCmd.AddCommand(bulksCmd)
+
+	getCmd.AddCommand(workerPoolsCmd)
 
 	getCmd.AddCommand(resultsCmd)
 	resultsCmd.Flags().Float64Var(&teff, "teff", 0.0, "Teff value to download a calculation.")
