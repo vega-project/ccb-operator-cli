@@ -42,7 +42,7 @@ var (
 
 	getCmd = &cobra.Command{
 		Use:              "get",
-		Short:            "Usage: `get calculation <calc-id>`, or `get calculations` to get all active calculations",
+		Short:            "Get an object - calculation/bulk/workerpool.",
 		TraverseChildren: true,
 	}
 
