@@ -17,7 +17,6 @@ var (
 		Use:   "ccboc",
 		Short: "CLI tool for integrating with the active calculations by communicating with the API server (see https://github.com/vega-project/ccb-operator/tree/master/cmd/apiserver)",
 		Long: "Examples of usage:" + "\n" +
-			"ccboc --teff=10000 --logG=4.0 create (Creates a calculation with teff=10000 and LogG=4.0)\n" +
 			"ccboc get calculation calc-1881i9dh5zvnllip (Gets the calculation with id='calc-1881i9dh5zvnllip')\n" +
 			"ccboc get calculations (Gets all active calculations)\n" +
 			"ccboc --teff=10000 --logG=4.0 get results (Downloads the result of a calculation with teff=10000 and LogG=4.0)\n" +
