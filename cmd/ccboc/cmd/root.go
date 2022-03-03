@@ -6,19 +6,26 @@ import (
 )
 
 var (
-	url   string
-	token string
-	teff  float64
-	logG  float64
-	path  string
+	url      string
+	token    string
+	teff     float64
+	logG     float64
+	path     string
+	bulkFile string
 
 	rootCmd = &cobra.Command{
 		Use:   "ccboc",
 		Short: "CLI tool for integrating with the active calculations by communicating with the API server (see https://github.com/vega-project/ccb-operator/tree/master/cmd/apiserver)",
 		Long: "Examples of usage:" + "\n" +
-			"  ccboc --teff=10000 --logG=4.0 create (Creates a calculation with teff=10000 and LogG=4.0)\n" +
-			"  ccboc get calculation calc-1881i9dh5zvnllip (Gets the calculation with id 'calc-1881i9dh5zvnllip')\n" +
-			"  ccboc get calculations [Get all active calculations]\n",
+			"ccboc --teff=10000 --logG=4.0 create (Creates a calculation with teff=10000 and LogG=4.0)\n" +
+			"ccboc get calculation calc-1881i9dh5zvnllip (Gets the calculation with id='calc-1881i9dh5zvnllip')\n" +
+			"ccboc get calculations (Gets all active calculations)\n" +
+			"ccboc --teff=10000 --logG=4.0 get results (Downloads the result of a calculation with teff=10000 and LogG=4.0)\n" +
+			"ccboc get results calc-1881i9dh5zvnllip (Downloads the result of a calculation with id='calc-1881i9dh5zvnllip')\n" +
+			"ccboc get bulks (Gets all calculation bulks)\n" +
+			"ccboc get bulk bulk-2bw55pr5p37dasdl (Gets the calculation bulk with id='2bw55pr5p37dasdl')\n" +
+			"ccboc get workerpools (Gets all the workerpools)\n" +
+			"ccboc create bulk --bulk-file=<bulk-input-file.json> (Creates a calculation bulk from a file)\n",
 	}
 
 	loginCmd = &cobra.Command{
@@ -35,8 +42,44 @@ var (
 
 	getCmd = &cobra.Command{
 		Use:              "get",
-		Short:            "Usage: `get calculation <calc-id>`, or `get calculations` to get all active calculations",
+		Short:            "Get an object - calculation/bulk/workerpool.",
 		TraverseChildren: true,
+	}
+
+	bulkCmd = &cobra.Command{
+		Use:   "bulk",
+		Short: "Get calculation bulk by an ID.",
+		Run: func(cmd *cobra.Command, args []string) {
+			initializeConfig()
+			err := getCalculationBulkByID()
+			if err != nil {
+				logrus.WithError(err).Fatal("get bulk <bulk-id> command failed")
+			}
+		},
+	}
+
+	bulksCmd = &cobra.Command{
+		Use:   "bulks",
+		Short: "Get all calculation bulks.",
+		Run: func(cmd *cobra.Command, args []string) {
+			initializeConfig()
+			err := getCalculationBulks()
+			if err != nil {
+				logrus.WithError(err).Fatal("get bulks command failed")
+			}
+		},
+	}
+
+	workerPoolsCmd = &cobra.Command{
+		Use:   "workerpools",
+		Short: "Get all workerpools.",
+		Run: func(cmd *cobra.Command, args []string) {
+			initializeConfig()
+			err := getWorkerPools()
+			if err != nil {
+				logrus.WithError(err).Fatal("get workerpools command failed")
+			}
+		},
 	}
 
 	calculationCmd = &cobra.Command{
@@ -44,7 +87,7 @@ var (
 		Short: "Get calculation by an ID.",
 		Run: func(cmd *cobra.Command, args []string) {
 			initializeConfig()
-			err := getCalculationID()
+			err := getCalculationByID()
 			if err != nil {
 				logrus.WithError(err).Fatal("get calculation <calc-id> command failed")
 			}
@@ -64,13 +107,35 @@ var (
 	}
 
 	createCmd = &cobra.Command{
-		Use:   "create",
-		Short: "Creates a calculation in the cluster with teff and logG value.",
+		Use:              "create",
+		Short:            "Creates a calculation/bulks in the cluster.",
+		TraverseChildren: true,
+	}
+
+	createCalcCmd = &cobra.Command{
+		Use:   "calculation",
+		Short: "Create a calculation in the cluster with specified logG and teff values.",
 		Run: func(cmd *cobra.Command, args []string) {
 			initializeConfig()
 			err := createCalculation()
 			if err != nil {
-				logrus.WithError(err).Fatal("create command failed")
+				logrus.WithError(err).Fatal("create calculation command failed")
+			}
+		},
+	}
+
+	createBulkCmd = &cobra.Command{
+		Use:   "bulk",
+		Short: "Creates a calculation bulk in the cluster using a .json file.",
+		Run: func(cmd *cobra.Command, args []string) {
+			initializeConfig()
+			var err error
+			if bulkFile == "" {
+				logrus.WithError(err).Fatal("file to create a calculation bulk not specified")
+			}
+			err = createCalculationBulk()
+			if err != nil {
+				logrus.WithError(err).Fatal("create a calculation bulk command failed")
 			}
 		},
 	}
@@ -115,12 +180,22 @@ func init() {
 
 	getCmd.AddCommand(calculationsCmd)
 
+	getCmd.AddCommand(bulkCmd)
+
+	getCmd.AddCommand(bulksCmd)
+
+	getCmd.AddCommand(workerPoolsCmd)
+
 	getCmd.AddCommand(resultsCmd)
 	resultsCmd.Flags().Float64Var(&teff, "teff", 0.0, "Teff value to download a calculation.")
 	resultsCmd.Flags().Float64Var(&logG, "logG", 0.0, "logG value to download a calculation.")
 	resultsCmd.Flags().StringVar(&path, "results-download-path", "", "Specified path to download the calculation to.")
 
 	rootCmd.AddCommand(createCmd)
-	createCmd.Flags().Float64Var(&teff, "teff", 0.0, "Teff value to create a calculation.")
-	createCmd.Flags().Float64Var(&logG, "logG", 0.0, "LogG value to create a calculation.")
+	createCmd.AddCommand(createCalcCmd)
+	createCalcCmd.Flags().Float64Var(&teff, "teff", 0.0, "Teff value to create a calculation.")
+	createCalcCmd.Flags().Float64Var(&logG, "logG", 0.0, "LogG value to create a calculation.")
+
+	createCmd.AddCommand(createBulkCmd)
+	createBulkCmd.Flags().StringVar(&bulkFile, "bulk-file", "", "File in .json format to create a calculation bulk.")
 }
