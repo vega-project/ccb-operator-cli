@@ -333,28 +333,6 @@ func createCalculationBulk() error {
 	return nil
 }
 
-func createCalculation() error {
-	if teff == 0 || logG == 0 {
-		return fmt.Errorf("--teff and --logG must specified together")
-	}
-
-	jsonData := fmt.Sprintf("{\"teff\": \"%0.1f\", \"logG\": \"%0.1f\"}", teff, logG)
-	body, responseError, err := request("POST", globalConfig.APIURL+"/calculations/create", bytes.NewBuffer([]byte(jsonData)))
-	if err != nil {
-		return err
-	} else if responseError != nil {
-		logrus.WithFields(logrus.Fields{"message": responseError.Message, "status_code": responseError.StatusCode}).Fatal("errors occurred")
-	}
-
-	var calc *calculationsv1.Calculation
-	if err := json.Unmarshal(body, &calc); err != nil {
-		return err
-	}
-
-	fmt.Printf("Calculation created: %s\n", calc.Name)
-	return nil
-}
-
 func request(method, endpoint string, buffer *bytes.Buffer) ([]byte, *errorResponse, error) {
 	req, err := http.NewRequest(method, endpoint, buffer)
 	if err != nil {
