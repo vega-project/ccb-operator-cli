@@ -108,20 +108,8 @@ var (
 
 	createCmd = &cobra.Command{
 		Use:              "create",
-		Short:            "Creates a calculation/bulks in the cluster.",
+		Short:            "Create a bulk in the cluster.",
 		TraverseChildren: true,
-	}
-
-	createCalcCmd = &cobra.Command{
-		Use:   "calculation",
-		Short: "Create a calculation in the cluster with specified logG and teff values.",
-		Run: func(cmd *cobra.Command, args []string) {
-			initializeConfig()
-			err := createCalculation()
-			if err != nil {
-				logrus.WithError(err).Fatal("create calculation command failed")
-			}
-		},
 	}
 
 	createBulkCmd = &cobra.Command{
@@ -192,9 +180,6 @@ func init() {
 	resultsCmd.Flags().StringVar(&path, "results-download-path", "", "Specified path to download the calculation to.")
 
 	rootCmd.AddCommand(createCmd)
-	createCmd.AddCommand(createCalcCmd)
-	createCalcCmd.Flags().Float64Var(&teff, "teff", 0.0, "Teff value to create a calculation.")
-	createCalcCmd.Flags().Float64Var(&logG, "logG", 0.0, "LogG value to create a calculation.")
 
 	createCmd.AddCommand(createBulkCmd)
 	createBulkCmd.Flags().StringVar(&bulkFile, "bulk-file", "", "File in .json format to create a calculation bulk.")
