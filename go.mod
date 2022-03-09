@@ -6,7 +6,7 @@ require (
 	github.com/jedib0t/go-pretty/v6 v6.2.1
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/cobra v1.2.1
-	github.com/vega-project/ccb-operator v0.0.0-20220223015727-4fe3dc172024
+	github.com/vega-project/ccb-operator v0.0.0-20220309182034-e06d78aaa750
 )
 
 require (
