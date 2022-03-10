@@ -444,6 +444,8 @@ github.com/ugorji/go v1.1.7/go.mod h1:kZn38zHttfInRq0xu/PH0az30d+z6vm202qpg1oXVM
 github.com/ugorji/go/codec v1.1.7/go.mod h1:Ax+UKWsSmolVDwsd+7N3ZtXu+yMGCf907BLYF3GoBXY=
 github.com/vega-project/ccb-operator v0.0.0-20220223015727-4fe3dc172024 h1:EM+y0/1Y+6FYgf53F9qT8KKb+ZvWKgSjGyVxrOmauLs=
 github.com/vega-project/ccb-operator v0.0.0-20220223015727-4fe3dc172024/go.mod h1:WxEHaQcGrXnS86xIB60Js3AXO+i3Ft+v84wP1CMVUFg=
+github.com/vega-project/ccb-operator v0.0.0-20220309182034-e06d78aaa750 h1:DFqYVDr8L2Ut5cOBbhx3ReQkOLyHjitsBTuUjOT8wII=
+github.com/vega-project/ccb-operator v0.0.0-20220309182034-e06d78aaa750/go.mod h1:WxEHaQcGrXnS86xIB60Js3AXO+i3Ft+v84wP1CMVUFg=
 github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2/go.mod h1:UETIi67q53MR2AWcXfiuqkDkRtnGDLqkBTpCHuJHxtU=
 github.com/yuin/goldmark v1.1.25/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 github.com/yuin/goldmark v1.1.27/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
