@@ -6,12 +6,10 @@ import (
 )
 
 var (
-	url      string
-	token    string
-	teff     float64
-	logG     float64
-	path     string
-	bulkFile string
+	url            string
+	token          string
+	bulkFile       string
+	workerPoolName string
 
 	rootCmd = &cobra.Command{
 		Use:   "ccboc",
@@ -19,12 +17,14 @@ var (
 		Long: "Examples of usage:" + "\n" +
 			"ccboc get calculation calc-1881i9dh5zvnllip (Gets the calculation with id='calc-1881i9dh5zvnllip')\n" +
 			"ccboc get calculations (Gets all active calculations)\n" +
-			"ccboc --teff=10000 --logG=4.0 get results (Downloads the result of a calculation with teff=10000 and LogG=4.0)\n" +
-			"ccboc get results calc-1881i9dh5zvnllip (Downloads the result of a calculation with id='calc-1881i9dh5zvnllip')\n" +
 			"ccboc get bulks (Gets all calculation bulks)\n" +
 			"ccboc get bulk bulk-2bw55pr5p37dasdl (Gets the calculation bulk with id='2bw55pr5p37dasdl')\n" +
 			"ccboc get workerpools (Gets all the workerpools)\n" +
-			"ccboc create bulk --bulk-file=<bulk-input-file.json> (Creates a calculation bulk from a file)\n",
+			"ccboc create bulk --bulk-file=<bulk-input-file.json> (Creates a calculation bulk from a file)\n" +
+			"ccboc create workerpool --name=vega-project\n" +
+			"ccboc get workerpool workerpool-vega-project\n" +
+			"ccboc delete workerpool workerpool-vega-project\n" +
+			"ccboc delete bulk bulk-vega-project",
 	}
 
 	loginCmd = &cobra.Command{
@@ -43,6 +43,34 @@ var (
 		Use:              "get",
 		Short:            "Get an object - calculation/bulk/workerpool.",
 		TraverseChildren: true,
+	}
+
+	deleteCmd = &cobra.Command{
+		Use:              "delete",
+		Short:            "Delete an object - bulk/workerpool",
+		TraverseChildren: true,
+	}
+
+	deleteWorkerPoolCmd = &cobra.Command{
+		Use:   "workerpool",
+		Short: "Delete a workerpool by an ID",
+		Run: func(cmd *cobra.Command, args []string) {
+			initializeConfig()
+			if err := deleteWorkerPool(); err != nil {
+				logrus.WithError(err).Fatal("delete workerpool <workerpool-id> command failed")
+			}
+		},
+	}
+
+	deleteCalculationBulkCmd = &cobra.Command{
+		Use:   "bulk",
+		Short: "Delete a calculation bulk by an ID",
+		Run: func(cmd *cobra.Command, args []string) {
+			initializeConfig()
+			if err := deleteCalculationBulk(); err != nil {
+				logrus.WithError(err).Fatal("delete calculation bulk <bulk-id> command failed")
+			}
+		},
 	}
 
 	bulkCmd = &cobra.Command{
@@ -65,6 +93,17 @@ var (
 			err := getCalculationBulks()
 			if err != nil {
 				logrus.WithError(err).Fatal("get bulks command failed")
+			}
+		},
+	}
+
+	workerPoolCmd = &cobra.Command{
+		Use:   "workerpool",
+		Short: "Get a workerpool by an ID",
+		Run: func(cmd *cobra.Command, args []string) {
+			initializeConfig()
+			if err := getWorkerPoolByName(); err != nil {
+				logrus.WithError(err).Fatal("get workerpool by name command failed")
 			}
 		},
 	}
@@ -107,7 +146,7 @@ var (
 
 	createCmd = &cobra.Command{
 		Use:              "create",
-		Short:            "Create a bulk in the cluster.",
+		Short:            "Create a bulk/workerpool object in the cluster.",
 		TraverseChildren: true,
 	}
 
@@ -127,25 +166,19 @@ var (
 		},
 	}
 
-	resultsCmd = &cobra.Command{
-		Use:   "results",
-		Short: "Downloads a calculation result by teff and logG or by calculation ID to a folder.",
+	createWorkerPoolCmd = &cobra.Command{
+		Use:   "workerpool",
+		Short: "Creates a workerpool in the cluster with custom name",
 		Run: func(cmd *cobra.Command, args []string) {
-			var err error
 			initializeConfig()
-			if teff == 0 && logG == 0 {
-				err = getCalculationResultByID()
-				if err != nil {
-					logrus.WithError(err).Fatal("get result by id command failed")
-				}
-			} else if teff != 0 && logG != 0 {
-				err = getCalculationResult()
-				if err != nil {
-					logrus.WithError(err).Fatal("get result by teff and logG command failed")
-				}
-			} else {
-				logrus.WithError(err).Fatal("wrong usage of get results command")
+			if workerPoolName == "" {
+				logrus.Fatal("name of the workerpool was not specified")
 			}
+			var err error
+			if err = createWorkerPool(); err != nil {
+				logrus.WithError(err).Fatal("create a workerpool command failed")
+			}
+
 		},
 	}
 )
@@ -173,13 +206,18 @@ func init() {
 
 	getCmd.AddCommand(workerPoolsCmd)
 
-	getCmd.AddCommand(resultsCmd)
-	resultsCmd.Flags().Float64Var(&teff, "teff", 0.0, "Teff value to download a calculation.")
-	resultsCmd.Flags().Float64Var(&logG, "logG", 0.0, "logG value to download a calculation.")
-	resultsCmd.Flags().StringVar(&path, "results-download-path", "", "Specified path to download the calculation to.")
+	getCmd.AddCommand(workerPoolCmd)
 
 	rootCmd.AddCommand(createCmd)
 
 	createCmd.AddCommand(createBulkCmd)
 	createBulkCmd.Flags().StringVar(&bulkFile, "bulk-file", "", "File in .json format to create a calculation bulk.")
+
+	createCmd.AddCommand(createWorkerPoolCmd)
+	createWorkerPoolCmd.Flags().StringVar(&workerPoolName, "name", "", "Name of the workerpool.")
+
+	rootCmd.AddCommand(deleteCmd)
+	deleteCmd.AddCommand(deleteWorkerPoolCmd)
+	deleteCmd.AddCommand(deleteCalculationBulkCmd)
+
 }
