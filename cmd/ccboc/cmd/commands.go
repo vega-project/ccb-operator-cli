@@ -7,11 +7,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	netUrl "net/url"
 	"os"
 	"os/user"
 	"path/filepath"
-	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/sirupsen/logrus"
@@ -132,107 +130,6 @@ func getCalculationByID() error {
 	return nil
 }
 
-func getCalculationResult() error {
-	u, err := netUrl.Parse(globalConfig.APIURL)
-	if err != nil {
-		return err
-	}
-
-	u.Path = "/calculations/results"
-
-	q := u.Query()
-	q.Set("logg", fmt.Sprintf("%0.2f", logG))
-	q.Set("teff", fmt.Sprintf("%0.1f", teff))
-	u.RawQuery = q.Encode()
-
-	req, err := http.NewRequest(http.MethodGet, u.String(), bytes.NewBuffer(nil))
-	if err != nil {
-		return err
-	}
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", globalConfig.Token))
-	req.Header.Add("Accept", "application/json")
-
-	client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-
-	fileNameHeader := resp.Header.Get("Content-Disposition")
-	if fileNameHeader == "" {
-		return fmt.Errorf("couldn't retrieve Content-Disposition header")
-	}
-	splitFileNameHeader := strings.Split(fileNameHeader, "=")
-
-	defaultPath, err := config.GetPathToCalculation(path, splitFileNameHeader[1])
-	if err != nil {
-		return err
-	}
-
-	err = config.CreateAndWriteFile(body, defaultPath)
-	if err != nil {
-		return err
-	}
-
-	logrus.Info("The calculations were downloaded into: ", defaultPath)
-
-	return nil
-}
-
-func getCalculationResultByID() error {
-	args := os.Args
-	calcID := args[len(args)-1]
-
-	if len(os.Args) != 4 {
-		return fmt.Errorf("not enough arguments to use `get results`")
-	}
-
-	req, err := http.NewRequest(http.MethodGet, globalConfig.APIURL+"/calculations/results/"+calcID, bytes.NewBuffer(nil))
-	if err != nil {
-		return err
-	}
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", globalConfig.Token))
-	req.Header.Add("Accept", "application/json")
-
-	client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-
-	fileNameHeader := resp.Header.Get("Content-Disposition")
-	if fileNameHeader == "" {
-		return fmt.Errorf("couldn't retrieve Content-Disposition header")
-	}
-	splitFileNameHeader := strings.Split(fileNameHeader, "=")
-
-	defaultPath, err := config.GetPathToCalculation(path, splitFileNameHeader[1])
-	if err != nil {
-		return err
-	}
-
-	err = config.CreateAndWriteFile(body, defaultPath)
-	if err != nil {
-		return err
-	}
-
-	logrus.Info("The calculations were downloaded into: ", defaultPath)
-
-	return nil
-}
-
 func getCalculationBulkByID() error {
 	args := os.Args
 	bulkID := args[len(args)-1]
@@ -282,6 +179,54 @@ func getCalculationBulks() error {
 	return nil
 }
 
+func deleteCalculationBulk() error {
+	args := os.Args
+	calculationBulkName := args[len(args)-1]
+
+	body, responseError, err := request("DELETE", fmt.Sprintf(globalConfig.APIURL+"/bulks/delete/%s", calculationBulkName), bytes.NewBuffer(nil))
+	if err != nil {
+		return err
+	} else if responseError != nil {
+		logrus.WithFields(logrus.Fields{"message": responseError.Message, "status_code": responseError.StatusCode}).Fatal("errors occured")
+	}
+
+	var response map[string]json.RawMessage
+	if err := json.Unmarshal(body, &response); err != nil {
+		return err
+	}
+
+	if string(response["status_code"]) == "200" {
+		logrus.Infof("Deleted calculation bulk %s successfully", calculationBulkName)
+	} else {
+		logrus.Infof("Couldn't delete the calculation bulk named %s", calculationBulkName)
+	}
+
+	return nil
+}
+
+func createWorkerPool() error {
+	body, responseError, err := request("POST", fmt.Sprintf(globalConfig.APIURL+"/workerpool/create?name=%s", workerPoolName), bytes.NewBuffer(nil))
+	if err != nil {
+		return err
+	} else if responseError != nil {
+		logrus.WithFields(logrus.Fields{"message": responseError.Message, "status_code": responseError.StatusCode}).Fatal("errors occured")
+	}
+
+	var response map[string]json.RawMessage
+	if err := json.Unmarshal(body, &response); err != nil {
+		return err
+	}
+
+	var workerPool *workersv1.WorkerPool
+	if err := json.Unmarshal(response["data"], &workerPool); err != nil {
+		return err
+	}
+
+	logrus.Infof("Created workerpool %s successfully", workerPool.Name)
+
+	return nil
+}
+
 func getWorkerPools() error {
 	body, responseError, err := request("GET", globalConfig.APIURL+"/workerpools", bytes.NewBuffer(nil))
 	if err != nil {
@@ -301,6 +246,57 @@ func getWorkerPools() error {
 	}
 
 	output(workerPoolsList)
+
+	return nil
+}
+
+func getWorkerPoolByName() error {
+	args := os.Args
+	workerPoolName := args[len(args)-1]
+
+	body, responseError, err := request("GET", globalConfig.APIURL+"/workerpool/"+workerPoolName, bytes.NewBuffer(nil))
+	if err != nil {
+		return err
+	} else if responseError != nil {
+		logrus.WithFields(logrus.Fields{"message": responseError.Message, "status_code": responseError.StatusCode}).Fatal("errors occurred")
+	}
+
+	var response map[string]json.RawMessage
+	if err := json.Unmarshal(body, &response); err != nil {
+		return err
+	}
+
+	var workerPool *workersv1.WorkerPool
+	if err := json.Unmarshal(response["data"], &workerPool); err != nil {
+		return err
+	}
+
+	output(workerPool)
+
+	return nil
+}
+
+func deleteWorkerPool() error {
+	args := os.Args
+	workerPoolName := args[len(args)-1]
+
+	body, responseError, err := request("DELETE", fmt.Sprintf(globalConfig.APIURL+"/workerpools/delete/%s", workerPoolName), bytes.NewBuffer(nil))
+	if err != nil {
+		return err
+	} else if responseError != nil {
+		logrus.WithFields(logrus.Fields{"message": responseError.Message, "status_code": responseError.StatusCode}).Fatal("errors occured")
+	}
+
+	var response map[string]json.RawMessage
+	if err := json.Unmarshal(body, &response); err != nil {
+		return err
+	}
+
+	if string(response["status_code"]) == "200" {
+		logrus.Infof("Deleted workerpool %s successfully", workerPoolName)
+	} else {
+		logrus.Infof("Couldn't delete the workerpool named %s", workerPoolName)
+	}
 
 	return nil
 }
@@ -377,6 +373,10 @@ func output(iface interface{}) {
 	workersWriter.SetOutputMirror(os.Stdout)
 	workersWriter.AppendHeader(table.Row{"#", "Name", "Workers"})
 
+	workerPoolWriter := table.NewWriter()
+	workerPoolWriter.SetOutputMirror(os.Stdout)
+	workerPoolWriter.AppendHeader(table.Row{"Name", "Workers"})
+
 	switch v := iface.(type) {
 	case *calculationsv1.Calculation:
 		t.AppendRows([]table.Row{{0, v.Name, v.Spec.Teff, v.Spec.LogG, v.Phase, v.Assign}})
@@ -415,5 +415,12 @@ func output(iface interface{}) {
 		workersWriter.AppendSeparator()
 		workersWriter.AppendFooter(table.Row{"Total", len(v.Items), "", ""})
 		workersWriter.Render()
+	case *workersv1.WorkerPool:
+		workerPoolWriter.AppendSeparator()
+		workerPoolWriter.AppendFooter(table.Row{v.Name, ""})
+		for _, w := range v.Spec.Workers {
+			workerPoolWriter.AppendRows([]table.Row{{"", w.Name}})
+		}
+		workerPoolWriter.Render()
 	}
 }
