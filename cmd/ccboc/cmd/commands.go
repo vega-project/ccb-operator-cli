@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"text/tabwriter"
 	"time"
 
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -341,24 +342,24 @@ func getCalculationPhase() error {
 	args := os.Args
 	bulkID := args[len(args)-1]
 
-	body, responseError, err := request("GET", globalConfig.APIURL+"/bulk/"+bulkID, bytes.NewBuffer(nil))
-	if err != nil {
-		return err
-	} else if responseError != nil {
-		logrus.WithFields(logrus.Fields{"message": responseError.Message, "status_code": responseError.StatusCode}).Fatal("errors occurred")
-	}
-
-	var response map[string]json.RawMessage
-	if err := json.Unmarshal(body, &response); err != nil {
-		return err
-	}
-
-	var bulk *bulkv1.CalculationBulk
-	if err := json.Unmarshal(response["data"], &bulk); err != nil {
-		return err
-	}
-
 	for {
+		body, responseError, err := request("GET", globalConfig.APIURL+"/bulk/"+bulkID, bytes.NewBuffer(nil))
+		if err != nil {
+			return err
+		} else if responseError != nil {
+			logrus.WithFields(logrus.Fields{"message": responseError.Message, "status_code": responseError.StatusCode}).Fatal("errors occurred")
+		}
+
+		var response map[string]json.RawMessage
+		if err := json.Unmarshal(body, &response); err != nil {
+			return err
+		}
+
+		var bulk *bulkv1.CalculationBulk
+		if err := json.Unmarshal(response["data"], &bulk); err != nil {
+			return err
+		}
+
 		c := make(chan os.Signal)
 		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 		go func() {
@@ -368,7 +369,7 @@ func getCalculationPhase() error {
 
 		phaseOutput(bulk)
 
-		time.Sleep(2 * time.Second)
+		time.Sleep(5 * time.Second)
 
 		cmd := exec.Command("clear")
 		cmd.Stdout = os.Stdout
@@ -408,24 +409,25 @@ func request(method, endpoint string, buffer *bytes.Buffer) ([]byte, *errorRespo
 }
 
 func phaseOutput(calculationBulk *bulkv1.CalculationBulk) {
-	t := table.NewWriter()
-	t.SetOutputMirror(os.Stdout)
-	t.AppendHeader(table.Row{"#", "Name", "Phase"})
-
+	w := tabwriter.NewWriter(os.Stdout, 40, 1, 1, ' ', tabwriter.TabIndent)
+	counter := 0
 	for _, calc := range calculationBulk.Calculations {
+		counter++
 		switch calc.Phase {
 		case calculationsv1.CompletedPhase:
-			t.AppendRows([]table.Row{{0, calc.Name, "\033[32m" + calculationsv1.CompletedPhase + "\033[32m" + "\033[0m"}})
+			fmt.Fprintf(w, "%s:%s\t", calc.Name, "\033[32m"+calculationsv1.CompletedPhase+"\033[32m"+"\033[0m")
 		case calculationsv1.FailedPhase:
-			t.AppendRows([]table.Row{{0, calc.Name, "\033[31m" + calculationsv1.FailedPhase + "\033[31m" + "\033[0m"}})
+			fmt.Fprintf(w, "%s:%s\t", calc.Name, "\033[31m"+calculationsv1.FailedPhase+"\033[31m"+"\033[0m")
 		case calculationsv1.ProcessingPhase:
-			t.AppendRows([]table.Row{{0, calc.Name, "\033[34m" + calculationsv1.ProcessingPhase + "\033[34m" + "\033[0m"}})
+			fmt.Fprintf(w, "%s:%s\t", calc.Name, "\033[34m"+calculationsv1.ProcessingPhase+"\033[34m"+"\033[0m")
 		case calculationsv1.CreatedPhase:
-			t.AppendRows([]table.Row{{0, calc.Name, calculationsv1.CreatedPhase + "\033[0m"}})
+			fmt.Fprintf(w, "%s:%s\t", calc.Name, "\033[97m"+calculationsv1.CreatedPhase+"\033[97m"+"\033[0m")
+		}
+		if counter%6 == 0 {
+			fmt.Fprint(w, "\n")
 		}
 	}
-
-	t.Render()
+	w.Flush()
 }
 
 func output(iface interface{}) {
