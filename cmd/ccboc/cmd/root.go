@@ -45,9 +45,22 @@ var (
 		TraverseChildren: true,
 	}
 
+	phaseCmd = &cobra.Command{
+		Use:   "phase",
+		Short: "Get a phase of ",
+		Run: func(cmd *cobra.Command, args []string) {
+			initializeConfig()
+			err := getCalculationPhase()
+			if err != nil {
+				logrus.WithError(err).Fatal("get bulk phase <bulk-id> command failed")
+			}
+		},
+	}
+
 	bulkCmd = &cobra.Command{
-		Use:   "bulk",
-		Short: "Get calculation bulk by an ID.",
+		Use:              "bulk",
+		Short:            "Get calculation bulk by an ID.",
+		TraverseChildren: true,
 		Run: func(cmd *cobra.Command, args []string) {
 			initializeConfig()
 			err := getCalculationBulkByID()
@@ -168,6 +181,8 @@ func init() {
 	getCmd.AddCommand(calculationsCmd)
 
 	getCmd.AddCommand(bulkCmd)
+
+	bulkCmd.AddCommand(phaseCmd)
 
 	getCmd.AddCommand(bulksCmd)
 

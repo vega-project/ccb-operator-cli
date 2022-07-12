@@ -9,9 +9,13 @@ import (
 	"net/http"
 	netUrl "net/url"
 	"os"
+	"os/exec"
+	"os/signal"
 	"os/user"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/sirupsen/logrus"
@@ -333,6 +337,45 @@ func createCalculationBulk() error {
 	return nil
 }
 
+func getCalculationPhase() error {
+	args := os.Args
+	bulkID := args[len(args)-1]
+
+	body, responseError, err := request("GET", globalConfig.APIURL+"/bulk/"+bulkID, bytes.NewBuffer(nil))
+	if err != nil {
+		return err
+	} else if responseError != nil {
+		logrus.WithFields(logrus.Fields{"message": responseError.Message, "status_code": responseError.StatusCode}).Fatal("errors occurred")
+	}
+
+	var response map[string]json.RawMessage
+	if err := json.Unmarshal(body, &response); err != nil {
+		return err
+	}
+
+	var bulk *bulkv1.CalculationBulk
+	if err := json.Unmarshal(response["data"], &bulk); err != nil {
+		return err
+	}
+
+	for {
+		c := make(chan os.Signal)
+		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+		go func() {
+			<-c
+			os.Exit(0)
+		}()
+
+		phaseOutput(bulk)
+
+		time.Sleep(2 * time.Second)
+
+		cmd := exec.Command("clear")
+		cmd.Stdout = os.Stdout
+		cmd.Run()
+	}
+}
+
 func request(method, endpoint string, buffer *bytes.Buffer) ([]byte, *errorResponse, error) {
 	req, err := http.NewRequest(method, endpoint, buffer)
 	if err != nil {
@@ -362,6 +405,27 @@ func request(method, endpoint string, buffer *bytes.Buffer) ([]byte, *errorRespo
 	}
 
 	return body, nil, nil
+}
+
+func phaseOutput(calculationBulk *bulkv1.CalculationBulk) {
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.AppendHeader(table.Row{"#", "Name", "Phase"})
+
+	for _, calc := range calculationBulk.Calculations {
+		switch calc.Phase {
+		case calculationsv1.CompletedPhase:
+			t.AppendRows([]table.Row{{0, calc.Name, "\033[32m" + calculationsv1.CompletedPhase + "\033[32m" + "\033[0m"}})
+		case calculationsv1.FailedPhase:
+			t.AppendRows([]table.Row{{0, calc.Name, "\033[31m" + calculationsv1.FailedPhase + "\033[31m" + "\033[0m"}})
+		case calculationsv1.ProcessingPhase:
+			t.AppendRows([]table.Row{{0, calc.Name, "\033[34m" + calculationsv1.ProcessingPhase + "\033[34m" + "\033[0m"}})
+		case calculationsv1.CreatedPhase:
+			t.AppendRows([]table.Row{{0, calc.Name, calculationsv1.CreatedPhase + "\033[0m"}})
+		}
+	}
+
+	t.Render()
 }
 
 func output(iface interface{}) {
