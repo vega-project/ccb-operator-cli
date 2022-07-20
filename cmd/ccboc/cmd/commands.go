@@ -9,16 +9,13 @@ import (
 	"net/http"
 	netUrl "net/url"
 	"os"
-	"os/exec"
-	"os/signal"
 	"os/user"
 	"path/filepath"
 	"strings"
-	"syscall"
-	"text/tabwriter"
-	"time"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/jedib0t/go-pretty/v6/table"
+	"github.com/rivo/tview"
 	"github.com/sirupsen/logrus"
 	"github.com/vega-project/ccb-operator-cli/pkg/config"
 
@@ -338,45 +335,6 @@ func createCalculationBulk() error {
 	return nil
 }
 
-func getCalculationPhase() error {
-	args := os.Args
-	bulkID := args[len(args)-1]
-
-	for {
-		body, responseError, err := request("GET", globalConfig.APIURL+"/bulk/"+bulkID, bytes.NewBuffer(nil))
-		if err != nil {
-			return err
-		} else if responseError != nil {
-			logrus.WithFields(logrus.Fields{"message": responseError.Message, "status_code": responseError.StatusCode}).Fatal("errors occurred")
-		}
-
-		var response map[string]json.RawMessage
-		if err := json.Unmarshal(body, &response); err != nil {
-			return err
-		}
-
-		var bulk *bulkv1.CalculationBulk
-		if err := json.Unmarshal(response["data"], &bulk); err != nil {
-			return err
-		}
-
-		c := make(chan os.Signal)
-		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-		go func() {
-			<-c
-			os.Exit(0)
-		}()
-
-		phaseOutput(bulk)
-
-		time.Sleep(5 * time.Second)
-
-		cmd := exec.Command("clear")
-		cmd.Stdout = os.Stdout
-		cmd.Run()
-	}
-}
-
 func request(method, endpoint string, buffer *bytes.Buffer) ([]byte, *errorResponse, error) {
 	req, err := http.NewRequest(method, endpoint, buffer)
 	if err != nil {
@@ -408,26 +366,88 @@ func request(method, endpoint string, buffer *bytes.Buffer) ([]byte, *errorRespo
 	return body, nil, nil
 }
 
-func phaseOutput(calculationBulk *bulkv1.CalculationBulk) {
-	w := tabwriter.NewWriter(os.Stdout, 40, 1, 1, ' ', tabwriter.TabIndent)
-	counter := 0
+func getCalculationPhase() error {
+	for {
+		app := tview.NewApplication()
+		table := tview.NewTable().
+			SetBorders(true)
+
+		calculationBulk, err := getCalculationBulkData()
+		if err != nil {
+			logrus.WithError(err).Fatal()
+		}
+
+		populateTable(calculationBulk, table)
+
+		table.Select(0, 0).SetFixed(1, 1).SetDoneFunc(func(key tcell.Key) {
+			if key == tcell.KeyEnter { // to refresh the table contents
+				app.Stop()
+			}
+			if key == tcell.KeyEsc { // to exit the app
+				app.Stop()
+				os.Exit(0)
+			}
+		})
+
+		if err := app.SetRoot(table, true).SetFocus(table).Run(); err != nil {
+			panic(err)
+		}
+		table.Clear()
+	}
+}
+
+func getCalculationBulkData() (*bulkv1.CalculationBulk, error) {
+	args := os.Args
+	bulkID := args[len(args)-1]
+
+	body, responseError, err := request("GET", globalConfig.APIURL+"/bulk/"+bulkID, bytes.NewBuffer(nil))
+	if err != nil {
+		return nil, err
+	} else if responseError != nil {
+		logrus.WithFields(logrus.Fields{"message": responseError.Message, "status_code": responseError.StatusCode}).Fatal("errors occurred")
+	}
+
+	var response map[string]json.RawMessage
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, err
+	}
+
+	var bulk *bulkv1.CalculationBulk
+	if err := json.Unmarshal(response["data"], &bulk); err != nil {
+		return nil, err
+	}
+
+	return bulk, nil
+}
+
+func populateTable(calculationBulk *bulkv1.CalculationBulk, table *tview.Table) {
+	rows, cols := 0, 0
+
 	for _, calc := range calculationBulk.Calculations {
-		counter++
 		switch calc.Phase {
 		case calculationsv1.CompletedPhase:
-			fmt.Fprintf(w, "%s:%s\t", calc.Name, "\033[32m"+calculationsv1.CompletedPhase+"\033[32m"+"\033[0m")
+			table.SetCell(rows, cols, tview.NewTableCell(fmt.Sprintf("%s:%s", calc.Name, calculationsv1.CompletedPhase)).
+				SetTextColor(tcell.ColorGreen).
+				SetAlign(tview.AlignCenter))
 		case calculationsv1.FailedPhase:
-			fmt.Fprintf(w, "%s:%s\t", calc.Name, "\033[31m"+calculationsv1.FailedPhase+"\033[31m"+"\033[0m")
+			table.SetCell(rows, cols, tview.NewTableCell(fmt.Sprintf("%s:%s", calc.Name, calculationsv1.FailedPhase)).
+				SetTextColor(tcell.ColorRed).
+				SetAlign(tview.AlignCenter))
 		case calculationsv1.ProcessingPhase:
-			fmt.Fprintf(w, "%s:%s\t", calc.Name, "\033[34m"+calculationsv1.ProcessingPhase+"\033[34m"+"\033[0m")
+			table.SetCell(rows, cols, tview.NewTableCell(fmt.Sprintf("%s:%s", calc.Name, calculationsv1.ProcessingPhase)).
+				SetTextColor(tcell.ColorWhite).
+				SetAlign(tview.AlignCenter))
 		case calculationsv1.CreatedPhase:
-			fmt.Fprintf(w, "%s:%s\t", calc.Name, "\033[97m"+calculationsv1.CreatedPhase+"\033[97m"+"\033[0m")
+			table.SetCell(rows, cols, tview.NewTableCell(fmt.Sprintf("%s:%s", calc.Name, calculationsv1.CreatedPhase)).
+				SetTextColor(tcell.ColorBlue).
+				SetAlign(tview.AlignCenter))
 		}
-		if counter%6 == 0 {
-			fmt.Fprint(w, "\n")
+		cols++
+		if cols%7 == 0 {
+			rows++
+			cols = 0
 		}
 	}
-	w.Flush()
 }
 
 func output(iface interface{}) {
