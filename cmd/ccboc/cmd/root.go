@@ -24,7 +24,8 @@ var (
 			"ccboc get bulks (Gets all calculation bulks)\n" +
 			"ccboc get bulk bulk-2bw55pr5p37dasdl (Gets the calculation bulk with id='2bw55pr5p37dasdl')\n" +
 			"ccboc get workerpools (Gets all the workerpools)\n" +
-			"ccboc create bulk --bulk-file=<bulk-input-file.json> (Creates a calculation bulk from a file)\n",
+			"ccboc create bulk --bulk-file=<bulk-input-file.json> (Creates a calculation bulk from a file)\n" +
+			"ccboc get phase bulk-2bw55pr5p37dasdl (Watches all calculation phases inside the calculation bulk)",
 	}
 
 	loginCmd = &cobra.Command{
@@ -47,7 +48,7 @@ var (
 
 	phaseCmd = &cobra.Command{
 		Use:   "phase",
-		Short: "Get a phase of ",
+		Short: "Get a phase of all calculations inside a calculation bulk",
 		Run: func(cmd *cobra.Command, args []string) {
 			initializeConfig()
 			err := getCalculationPhase()
