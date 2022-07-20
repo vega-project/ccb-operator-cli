@@ -12,6 +12,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -367,11 +368,11 @@ func request(method, endpoint string, buffer *bytes.Buffer) ([]byte, *errorRespo
 }
 
 func getCalculationPhase() error {
-	for {
-		app := tview.NewApplication()
-		table := tview.NewTable().
-			SetBorders(true)
+	app := tview.NewApplication()
+	table := tview.NewTable().
+		SetBorders(true)
 
+	for {
 		calculationBulk, err := getCalculationBulkData()
 		if err != nil {
 			logrus.WithError(err).Fatal()
@@ -379,15 +380,22 @@ func getCalculationPhase() error {
 
 		populateTable(calculationBulk, table)
 
-		table.Select(0, 0).SetFixed(1, 1).SetDoneFunc(func(key tcell.Key) {
-			if key == tcell.KeyEnter { // to refresh the table contents
-				app.Stop()
-			}
-			if key == tcell.KeyEsc { // to exit the app
+		app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+			if event.Key() == tcell.KeyEsc { // to exit the app with ESC
 				app.Stop()
 				os.Exit(0)
 			}
+			if event.Key() == tcell.KeyCtrlC { // to exit the app with CTRL+C
+				app.Stop()
+				os.Exit(0)
+			}
+			return nil
 		})
+
+		go func() {
+			time.Sleep(time.Second * 3) // fetch new data every 3 seconds
+			app.Stop()
+		}()
 
 		if err := app.SetRoot(table, true).SetFocus(table).Run(); err != nil {
 			logrus.WithError(err).Fatal()
