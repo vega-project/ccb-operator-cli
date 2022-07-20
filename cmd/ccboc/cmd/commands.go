@@ -390,7 +390,7 @@ func getCalculationPhase() error {
 		})
 
 		if err := app.SetRoot(table, true).SetFocus(table).Run(); err != nil {
-			panic(err)
+			logrus.WithError(err).Fatal()
 		}
 		table.Clear()
 	}
