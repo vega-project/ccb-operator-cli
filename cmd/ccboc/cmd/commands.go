@@ -12,8 +12,11 @@ import (
 	"os/user"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/jedib0t/go-pretty/v6/table"
+	"github.com/rivo/tview"
 	"github.com/sirupsen/logrus"
 	"github.com/vega-project/ccb-operator-cli/pkg/config"
 
@@ -362,6 +365,94 @@ func request(method, endpoint string, buffer *bytes.Buffer) ([]byte, *errorRespo
 	}
 
 	return body, nil, nil
+}
+
+func getCalculationPhase() error {
+	app := tview.NewApplication()
+	table := tview.NewTable().
+		SetBorders(true)
+
+	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEsc || event.Key() == tcell.KeyCtrlC { // to exit the app with ESC or CTRL+C
+			app.Stop()
+		}
+		return nil
+	})
+
+	go func() {
+		for {
+			app.QueueUpdateDraw(func() {
+				calculationBulk, err := getCalculationBulkData()
+				if err != nil {
+					logrus.WithError(err).Fatal()
+				}
+
+				populateTable(calculationBulk, table)
+			})
+			time.Sleep(time.Second * 3)
+		}
+	}()
+
+	if err := app.SetRoot(table, true).SetFocus(table).Run(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func getCalculationBulkData() (*bulkv1.CalculationBulk, error) {
+	args := os.Args
+	bulkID := args[len(args)-1]
+
+	body, responseError, err := request("GET", globalConfig.APIURL+"/bulk/"+bulkID, bytes.NewBuffer(nil))
+	if err != nil {
+		return nil, err
+	} else if responseError != nil {
+		logrus.WithFields(logrus.Fields{"message": responseError.Message, "status_code": responseError.StatusCode}).Fatal("errors occurred")
+	}
+
+	var response map[string]json.RawMessage
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, err
+	}
+
+	var bulk *bulkv1.CalculationBulk
+	if err := json.Unmarshal(response["data"], &bulk); err != nil {
+		return nil, err
+	}
+
+	return bulk, nil
+}
+
+func populateTable(calculationBulk *bulkv1.CalculationBulk, table *tview.Table) {
+	table.Clear()
+	rows, cols := 0, 0
+
+	for name, calc := range calculationBulk.Calculations {
+		switch calc.Phase {
+		case calculationsv1.CompletedPhase:
+			table.SetCell(rows, cols, tview.NewTableCell(fmt.Sprintf("%s:%s", name, calculationsv1.CompletedPhase)).
+				SetTextColor(tcell.ColorGreen).
+				SetAlign(tview.AlignCenter))
+		case calculationsv1.FailedPhase:
+			table.SetCell(rows, cols, tview.NewTableCell(fmt.Sprintf("%s:%s", name, calculationsv1.FailedPhase)).
+				SetTextColor(tcell.ColorRed).
+				SetAlign(tview.AlignCenter))
+		case calculationsv1.ProcessingPhase:
+			table.SetCell(rows, cols, tview.NewTableCell(fmt.Sprintf("%s:%s", name, calculationsv1.ProcessingPhase)).
+				SetTextColor(tcell.ColorWhite).
+				SetAlign(tview.AlignCenter))
+		case calculationsv1.CreatedPhase:
+			table.SetCell(rows, cols, tview.NewTableCell(fmt.Sprintf("%s:%s", name, calculationsv1.CreatedPhase)).
+				SetTextColor(tcell.ColorBlue).
+				SetAlign(tview.AlignCenter))
+		}
+		cols++
+		if cols%7 == 0 {
+			rows++
+			cols = 0
+		}
+	}
 }
 
 func output(iface interface{}) {
