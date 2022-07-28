@@ -372,36 +372,32 @@ func getCalculationPhase() error {
 	table := tview.NewTable().
 		SetBorders(true)
 
-	for {
-		calculationBulk, err := getCalculationBulkData()
-		if err != nil {
-			logrus.WithError(err).Fatal()
-		}
-
-		populateTable(calculationBulk, table)
-
-		app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-			if event.Key() == tcell.KeyEsc { // to exit the app with ESC
-				app.Stop()
-				os.Exit(0)
-			}
-			if event.Key() == tcell.KeyCtrlC { // to exit the app with CTRL+C
-				app.Stop()
-				os.Exit(0)
-			}
-			return nil
-		})
-
-		go func() {
-			time.Sleep(time.Second * 3) // fetch new data every 3 seconds
+	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEsc || event.Key() == tcell.KeyCtrlC { // to exit the app with ESC or CTRL+C
 			app.Stop()
-		}()
-
-		if err := app.SetRoot(table, true).SetFocus(table).Run(); err != nil {
-			logrus.WithError(err).Fatal()
 		}
-		table.Clear()
+		return nil
+	})
+
+	go func() {
+		for {
+			app.QueueUpdateDraw(func() {
+				calculationBulk, err := getCalculationBulkData()
+				if err != nil {
+					logrus.WithError(err).Fatal()
+				}
+
+				populateTable(calculationBulk, table)
+			})
+			time.Sleep(time.Second * 3)
+		}
+	}()
+
+	if err := app.SetRoot(table, true).SetFocus(table).Run(); err != nil {
+		return err
 	}
+
+	return nil
 }
 
 func getCalculationBulkData() (*bulkv1.CalculationBulk, error) {
@@ -429,24 +425,25 @@ func getCalculationBulkData() (*bulkv1.CalculationBulk, error) {
 }
 
 func populateTable(calculationBulk *bulkv1.CalculationBulk, table *tview.Table) {
+	table.Clear()
 	rows, cols := 0, 0
 
-	for _, calc := range calculationBulk.Calculations {
+	for name, calc := range calculationBulk.Calculations {
 		switch calc.Phase {
 		case calculationsv1.CompletedPhase:
-			table.SetCell(rows, cols, tview.NewTableCell(fmt.Sprintf("%s:%s", calc.Name, calculationsv1.CompletedPhase)).
+			table.SetCell(rows, cols, tview.NewTableCell(fmt.Sprintf("%s:%s", name, calculationsv1.CompletedPhase)).
 				SetTextColor(tcell.ColorGreen).
 				SetAlign(tview.AlignCenter))
 		case calculationsv1.FailedPhase:
-			table.SetCell(rows, cols, tview.NewTableCell(fmt.Sprintf("%s:%s", calc.Name, calculationsv1.FailedPhase)).
+			table.SetCell(rows, cols, tview.NewTableCell(fmt.Sprintf("%s:%s", name, calculationsv1.FailedPhase)).
 				SetTextColor(tcell.ColorRed).
 				SetAlign(tview.AlignCenter))
 		case calculationsv1.ProcessingPhase:
-			table.SetCell(rows, cols, tview.NewTableCell(fmt.Sprintf("%s:%s", calc.Name, calculationsv1.ProcessingPhase)).
+			table.SetCell(rows, cols, tview.NewTableCell(fmt.Sprintf("%s:%s", name, calculationsv1.ProcessingPhase)).
 				SetTextColor(tcell.ColorWhite).
 				SetAlign(tview.AlignCenter))
 		case calculationsv1.CreatedPhase:
-			table.SetCell(rows, cols, tview.NewTableCell(fmt.Sprintf("%s:%s", calc.Name, calculationsv1.CreatedPhase)).
+			table.SetCell(rows, cols, tview.NewTableCell(fmt.Sprintf("%s:%s", name, calculationsv1.CreatedPhase)).
 				SetTextColor(tcell.ColorBlue).
 				SetAlign(tview.AlignCenter))
 		}
